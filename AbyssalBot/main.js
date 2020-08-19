@@ -7,10 +7,10 @@ const mysql = require('mysql');
 const MojangAPI = require('mojang-api');
 
 var con = mysql.createConnection({
-	host: "162.241.218.73",
-	user: "kerrweba_userban",
-    password: "Rance1223!",
-    database: "kerrweba_litebans"
+	host: "ip.address.insert.here",
+	user: "username",
+    password: "password",
+    database: "database"
 });
 
 var globalAnnouncement = '0';
