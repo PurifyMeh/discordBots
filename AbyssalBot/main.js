@@ -81,10 +81,6 @@ client.on('message', async message => {
 	    message.channel.send('dont ping me, you imbecile');
 	}
 	if (!message.content.startsWith(prefix) || message.author.bot) {
-		if ((msg == 'no') || (msg == 'perhaps') || (msg == 'maybe') || (msg == 'well yes but actually no') || 
-		(msg == 'well yes but no') || (msg == 'f') || (msg == 'e') || (msg == 'bruh') || (msg == 'ee') || 
-		(msg == 'eee') || (msg == 'no u') || (msg == 'nou') || (msg == 'oof') || (msg == 'its time') || 
-		(msg == 'its time to stop') || (msg == 'your welcome') || (msg == 'youre welcome')) {
             if (openImage === true) {
                 if (msg == 'no') {
                     message.channel.send(`${message.author}: https://i.kym-cdn.com/photos/images/original/001/483/348/bdd.jpg`);
@@ -103,10 +99,10 @@ client.on('message', async message => {
                 } else if ((msg == 'no u') || (msg == 'nou')) {
                     message.channel.send(`${message.author}: https://a.wattpad.com/cover/201516290-352-k392254.jpg`);
                 } else if ((msg == 'its time') || (msg == 'its time to stop')) {
-					message.channel.send(`${message.author}: https://i.kym-cdn.com/photos/images/newsfeed/001/060/689/927.jpg`);
-				} else if ((msg == 'your welcome') || (msg == 'youre welcome')) {
-				    message.channel.send(`${message.author}: https://media.tenor.com/images/dbe92dca2654c178dc490223f8a2d959/tenor.gif`);
-				}
+		    message.channel.send(`${message.author}: https://i.kym-cdn.com/photos/images/newsfeed/001/060/689/927.jpg`);
+		} else if ((msg == 'your welcome') || (msg == 'youre welcome')) {
+		    message.channel.send(`${message.author}: https://media.tenor.com/images/dbe92dca2654c178dc490223f8a2d959/tenor.gif`);
+		}
             }
         } if (message.channel.id === globalAnnouncement) {
 			if (!message.author.bot) {
