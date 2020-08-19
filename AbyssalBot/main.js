@@ -4,7 +4,6 @@ const { token, version } = require('./config.json');
 const { Member } = require('discord.io');
 const footer = '---------------------------------------------\nbot by dest™#9640';
 const mysql = require('mysql');
-const MojangAPI = require('mojang-api');
 
 var con = mysql.createConnection({
 	host: "ip.address.insert.here",
