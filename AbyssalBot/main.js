@@ -78,7 +78,7 @@ client.on('message', async message => {
 	    }
 	}
 	if (msg.includes("<@!743088157796597830>")) {
-	    message.channel.send('dont ping me, you imbecile');
+	    message.channel.send(':ping:');
 	}
 	if (!message.content.startsWith(prefix) || message.author.bot) {
             if (openImage === true) {
