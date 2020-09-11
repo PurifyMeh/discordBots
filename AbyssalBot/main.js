@@ -1,7 +1,7 @@
 const Discord = require('discord.js');
 const mysql = require('mysql');
 const client = new Discord.Client( {partials: ["MESSAGE", "REACTION", "GUILD_MEMBER", "CHANNEL", "USER"]});
-// var server = new Discord.Guild();
+var server = new Discord.Guild();
 const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote } = require('./config.json');
 var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole } = require('./config.json');
 var defaultPrefix = prefix;
@@ -20,10 +20,10 @@ var openImage = false; var setupUser = '0';
 var blacklist = true;
 var join = true;
 
-var blacklistedWords = [];
+var blacklistedWords = ["nigger", "nigga", "nazi"];
 var trigger = true;
-var reactionTrigger = [];
-var reactionResponse = [];
+var reactionTrigger = ["r", "ayy", "ping"];
+var reactionResponse = [`"That's rough buddy"`, "lmao", "<user> pong!"];
 var commands = ["story", "images", "offence", "blacklist", "prefix", "help", "update", "join", "trigger"];
 
 var namehist = []; var uuidhist = [];
@@ -41,7 +41,7 @@ var pool = mysql.createPool({
 client.once('ready', () => {
     console.log('Online and Ready!');
     console.log(`Using version ${version}`);
-	client.user.setActivity('myself', { type: 'WATCHING'});
+	client.user.setActivity('over Abyssal', { type: 'WATCHING'});
 	pool.getConnection(function(err, connection) {
         if (err) {
 			console.log("Error connecting to mySQL. Connection refused!");
@@ -93,7 +93,7 @@ client.on('guildMemberAdd', async member => {
 		const channel = client.channels.cache.get(member.guild.systemChannelID);
 		if (!channel) return;
 		const joinEmbed = new Discord.MessageEmbed();
-		joinEmbed.setTitle("insert_member_alert");
+		joinEmbed.setTitle("New Member Alert!");
 		joinEmbed.setDescription(`${joinMessage}, ${member}!`);
 		channel.send(joinEmbed);
 	}
@@ -383,7 +383,8 @@ client.on('message', async message => {
 		if (!message.author.bot) {
 			for (var i = 0; i < reactionTrigger.length; i++) {
 				if (msg === reactionTrigger[i]) {
-					message.channel.send(reactionResponse[i]);
+					const response = reactionResponse[i].replace(/<user>/gi, getUserMention(message.author));
+					message.channel.send(response);
 					return;
 				}
 			}
@@ -411,8 +412,6 @@ client.on('message', async message => {
 				message.channel.send(`${message.author}: https://i.kym-cdn.com/photos/images/newsfeed/001/060/689/927.jpg`);
 			} else if ((msg === 'your welcome') || (msg === 'youre welcome') || (msg === "you're welcome")) {
 				message.channel.send(`${message.author}: https://media.tenor.com/images/dbe92dca2654c178dc490223f8a2d959/tenor.gif`);
-			} else if (msg === 'ayy') {
-				message.channel.send('lmao');
 			}
 		}
 	}
@@ -861,7 +860,7 @@ client.on('message', async message => {
 						} else {
 							if (isInt(args[1])) {
 								if (args[1] <= reactionTrigger.length && args[1] > 0) {
-									message.channel.send("Successfully removed `" + reactionTrigger[args[1]-1] + "` from the trigger list!");
+									message.channel.send("Successfully removed `" + reactionTrigger[args[1]-1] + "` from the trigger list " + getUserMention(message.author) + " !");
 									reactionTrigger.splice(args[1]-1, 1);
 									reactionResponse.splice(args[1]-1, 1);
 								} else {
