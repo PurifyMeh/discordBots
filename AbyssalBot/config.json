@@ -1,6 +1,14 @@
 {
-	"prefix": "-",
-	"token": "token for bot",
-	"name": "abyssal bot",
-	"version": "1.0.0"
+	"prefix": "a!",
+	"token": "insert_token",
+	"name": "insert_bot_name",
+	"version": "1.0.0",
+	"serverID": "insert_guild_id",
+	"offenceChannel": "insert_default_offence_channel_id",
+	"acceptedSuggestionsChannel": "insert_default_accepted_suggestions_channel_id",
+	"updatesChannel": "Insert_default_updates_channel_id",
+	"upvote": "👍",
+	"downvote": "👎",
+	"joinMessage": "insert_default_join_message",
+	"memberRole": "insert_join_role_id"
 }
