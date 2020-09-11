@@ -1,12 +1,14 @@
 const Discord = require('discord.js');
 const mysql = require('mysql');
+const fs = require('fs');
 const client = new Discord.Client( {partials: ["MESSAGE", "REACTION", "GUILD_MEMBER", "CHANNEL", "USER"]});
-var server = new Discord.Guild();
-const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote } = require('./config.json');
-var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole } = require('./config.json');
+const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote, footer } = require('./config.json');
+var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole, status } = require('./config.json');
 var defaultPrefix = prefix;
 const { address, user, pass, database} = require('./mysql.json');
-const footer = '\nplay.abyssal.ml';
+const { updateCreateChannel } = require('./updates/channelCreate');
+const { get } = require('http');
+var activity = (status + prefix + 'help');
 
 var previousAuthorThreeAdv = '0'; var previousAuthorAdv = '0';
 var previousStoryThree = ""; var previousStory = "";
@@ -17,14 +19,13 @@ var threeWord = " "; var oneWord = " "; var storyModeT = "e"; var storyModeO = "
 var oneWordID = ''; var threeWordID = '';
 var threeWordSetup = false; var oneWordSetup = false;
 var openImage = false; var setupUser = '0';
-var blacklist = true;
-var join = true;
+var blacklist = true; var join = true; var auto = true;
 
 var blacklistedWords = ["nigger", "nigga", "nazi"];
 var trigger = true;
 var reactionTrigger = ["r", "ayy", "ping"];
 var reactionResponse = [`"That's rough buddy"`, "lmao", "<user> pong!"];
-var commands = ["story", "images", "offence", "blacklist", "prefix", "help", "update", "join", "trigger"];
+var commands = ["story", "images", "offence", "blacklist", "prefix", "help", "update", "join", "trigger", "auto"];
 
 var namehist = []; var uuidhist = [];
 var bans; var mutes;
@@ -38,10 +39,16 @@ var pool = mysql.createPool({
     database: database
 });
 
+const updateFiles = fs.readdirSync('./updates').filter(file => file.endsWith('.js'));
+client.updates = new Discord.Collection();
+for (const file of updateFiles) {
+	const update = require(`./updates/${file}`);
+	client.updates.set(update.name, update);
+}
+
 client.once('ready', () => {
-    console.log('Online and Ready!');
-    console.log(`Using version ${version}`);
-	client.user.setActivity('over Abyssal', { type: 'WATCHING'});
+    console.log('\nOnline and Ready! \nUsing version ' + version);
+	client.user.setActivity(activity, { type: 'WATCHING'});
 	pool.getConnection(function(err, connection) {
         if (err) {
 			console.log("Error connecting to mySQL. Connection refused!");
@@ -89,252 +96,57 @@ client.once('ready', () => {
 });
 
 client.on('guildMemberAdd', async member => {
-	if (join) {
-		const channel = client.channels.cache.get(member.guild.systemChannelID);
-		if (!channel) return;
-		const joinEmbed = new Discord.MessageEmbed();
-		joinEmbed.setTitle("New Member Alert!");
-		joinEmbed.setDescription(`${joinMessage}, ${member}!`);
-		channel.send(joinEmbed);
-	}
-	server = member.guild;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-	change.setDescription(`Member ${member} has joined the discord!`);
-	change.setFooter(footer);
-	ch.send(change);
-
-	const role = member.guild.roles.cache.find(role => role.id === memberRole);
-	if (!role) return;
-	member.roles.add(role);
+	client.updates.get('guildMemberAdd').execute(Discord, client, member, updatesChannel, joinMessage, memberRole);
 });
 
 client.login(token);
 
 client.on('channelCreate', async channel => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#00ff00');
-	change.addFields(
-		{ name: ("A `" + channel.type +" channel` was created!"), value: getChannelMention(channel.id), inline: false},
-		{ name: "Channel Name", value: channel.name, inline: true},
-		{ name: "Channel ID", value: channel.id, inline: true}
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('channelCreate').execute(Discord, client, channel, updatesChannel);
 });
 
 client.on('channelDelete', async channel => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#ff0000');
-	change.addFields(
-		{ name: ("A `" + channel.type +" channel` was deleted!"), value: ("#" + channel.name), inline: false},
-		{ name: "Channel ID", value: channel.id, inline: true}
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('channelDelete').execute(Discord, client, channel, updatesChannel);
 });
 
 client.on('channelUpdate', async (oldChannel, newChannel) => {
-	if (oldChannel.name === newChannel.name) return;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#ffa500');
-	change.addFields(
-		{ name: 'A channel was edited!', value: ("<#" + oldChannel.id + ">"), inline: false},
-		{ name: 'Old Name', value: oldChannel.name, inline: true },
-		{ name: 'New Name', value: newChannel.name, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('channelUpdate').execute(Discord, client, oldChannel, newChannel, updatesChannel);
 });
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-	if (oldMember.nickname === newMember.nickname) return;
-	if (oldMember.nickname === null) oldMember.nickname = oldMember.displayName;
-	if (newMember.nickname === null) newMember.nickname = newMember.displayName;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#ffa500');
-	change.addFields(
-		{ name: "A user's nickname was changed!", value: ("<@" + oldMember.id + ">"), inline: false},
-		{ name: 'Old Name', value: oldMember.nickname, inline: true },
-		{ name: 'New Name', value: newMember.nickname, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('guildMemberUpdate').execute(Discord, client, oldMember, newMember, updatesChannel);
 });
 
 client.on('messageDelete', async message => {
-	if (message.partial) {
-		try {
-			await message.fetch();
-		} catch (error) {
-			console.log("Something wrong while fetching uncached messages!", error);
-		}
-	}
-	if (message.channel.name.indexOf("suggestion") !== -1) return;
-	if (message.channel.name.indexOf("announcement") !== -1) return;
-	if (message.channel.name.indexOf("update") !== -1) return;
-	if (message.channel.name.indexOf(oneWord) !== -1) return;
-	if (message.channel.name.indexOf(threeWord) !== -1) return;
-	if (message.author.bot) return;
-	if (message.content.startsWith(prefix)) return;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	if (message.content === undefined) {
-		message.content = "Embedded message";
-		message.id = "NULL";
-	}
-	const change = new Discord.MessageEmbed();
-	try {
-		change.setColor('#ff0000');
-		change.addFields(
-			{ name: "A message was deleted!", value: message.content, inline: false},
-			{ name: 'From user', value: getUserMention(message.author), inline: true },
-			{ name: 'Under channel', value: getChannelMention(message.channel.id), inline: true },
-			{ name: 'Message ID', value: message.id, inline: true }
-		);
-		change.setFooter(footer);
-		ch.send(change);
-	} catch(error) {
-		console.log("Something wrong happened when logging a deleted message!", error);
-	}
+	client.updates.get('messageDelete').execute(Discord, client, message, updatesChannel, oneWord, threeWord, prefix);
 });
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
-	if (oldMessage.content === newMessage.content) return;
-	if (oldMessage.channel.name.indexOf(oneWord) !== -1) return;
-	if (oldMessage.channel.name.indexOf(threeWord) !== -1) return;
-	if (oldMessage.author.bot) return;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-	try {
-		change.setColor('#ffa500');
-		change.addFields(
-			{ name: "A message was edited!", value: oldMessage.content, inline: false},
-			{ name: "Edited message", value: newMessage.content, inline: false},
-			{ name: 'From user', value: getUserMention(newMessage.author), inline: true},
-			{ name: 'From channel', value: getChannelMention(oldMessage.channel.id), inline: true },
-			{ name: 'Message ID', value: newMessage.id, inline: false }
-		);
-		change.setFooter(footer);
-		ch.send(change);
-	} catch(error) {
-		console.log("Something wrong happened when logging an edited message!", error);
-	}
+	client.updates.get('messageUpdate').execute(Discord, client, oldMessage, newMessage, updatesChannel, oneWord, threeWord);
 });
 
 client.on('roleCreate', async role => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#00ff00');
-	change.addFields(
-		{ name: ("A role was created!"), value: ("<@&"+role.id+">"), inline: false},
-		{ name: 'Role Name', value: role.name, inline: false },
-		{ name: 'Role ID', value: role.id, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('roleCreate').execute(Discord, client, role, updatesChannel);
 });
 
 client.on('roleDelete', async role => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#ff0000');
-	change.addFields(
-		{ name: ("A role was deleted!"), value: ("@"+role.name), inline: false},
-		{ name: 'Role ID', value: role.id, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('roleDelete').execute(Discord, client, role, updatesChannel);
 });
 
 client.on('roleUpdate', async (oldRole, newRole) => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-	change.setColor('#ffa500');
-	change.setFooter(footer);
-	if (oldRole.name !== newRole.name) {
-		change.addFields(
-			{ name: ("A role was updated!"), value: ("<@&"+oldRole.id+">"), inline: false},
-			{ name: 'Old Name', value: oldRole.name, inline: false },
-			{ name: 'New Name', value: newRole.name, inline: false },
-			{ name: 'Role ID', value: oldRole.id, inline: true }
-		);
-		ch.send(change);
-	} else if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) {
-		change.addFields(
-			{ name: ("Role permissions were updated!"), value: ("<@&"+oldRole.id+">"), inline: false},
-			{ name: 'Role ID', value: oldRole.id, inline: true }
-		);
-		ch.send(change);
-	}
+	client.updates.get('roleUpdate').execute(Discord, client, oldRole, newRole, updatesChannel);
 });
 
 client.on('guildBanAdd', async (guild, user) => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-    change.setColor('#ff0000');
-	change.addFields(
-		{ name: ("Member @" + user.tag + " was banned from the discord!"), value: (await guild.fetchBan(user)).reason, inline: true},
-		{ name: 'Member ID', value: user.id, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('guildBanAdd').execute(Discord, client, guild, user, updatesChannel);
 });
 
 client.on('guildBanRemove', async (guild, user) => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	var reason = (await guild.fetchBan(user)).reason;
-	if (reason === undefined) reason = "NULL";
-	const change = new Discord.MessageEmbed();
-    change.setColor('#00ff00');
-	change.addFields(
-		{ name: ("Member @" + user.tag + " was unbanned from the discord!"), value: reason, inline: true},
-		{ name: 'Member ID', value: user.id, inline: true }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('guildBanRemove').execute(Discord, client, guild, user, updatesChannel);
 });
 
 client.on('guildMemberRemove', async member => {
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-	change.setDescription(`Member ${member} has left the discord!`);
-	change.setFooter(footer);
-	ch.send(change);
-});
-
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-	if (oldMember.roles === newMember.roles) return;
-	const ch = client.channels.cache.get(updatesChannel);
-	if (!ch) return;
-	const change = new Discord.MessageEmbed();
-	var roles = newMember.roles.cache.array();
-	roles.pop();
-	if (roles[0] === undefined) roles[0] = "None";
-	change.setColor('#ffa500');
-	change.addFields(
-		{ name: "Updated roles for member", value: getUserMention(oldMember) , inline: false },
-		{ name: 'Roles', value: roles, inline: false },
-		{ name: 'Member ID', value: oldMember.id, inline: false }
-	);
-	change.setFooter(footer);
-	ch.send(change);
+	client.updates.get('guildMemberRemove').execute(Discord, client, member, updatesChannel);
 });
 
 client.on('messageReactionAdd', async (react, user) => {
@@ -415,29 +227,32 @@ client.on('message', async message => {
 			}
 		}
 	}
-	var channelName = message.channel.name;
-	if ((channelName.indexOf("announcement") !== -1) || (channelName.indexOf("update") !== -1) || (channelName.indexOf("event") !== -1)) {
-		if (!message.author.bot) {
-			const attach = getAttachment(message.attachments);
-			const announceEmbedd = new Discord.MessageEmbed();
-			announceEmbedd.setColor(Math.floor(Math.random() * 16777214) + 1);
-			announceEmbedd.setAuthor(message.author.username, message.author.displayAvatarURL());
-			announceEmbedd.setFooter(footer);
-			if (message.content.startsWith("http") && (message.content.endsWith(".png") || message.content.endsWith(".jpg") || message.content.endsWith(".gif") || message.content.endsWith(".jpeg"))) {
-				announceEmbedd.setImage(message.content);
-			} else {
-				announceEmbedd.setDescription(message.content);
+	if (auto) {
+		var channelName = message.channel.name;
+		if ((channelName.indexOf("announcement") !== -1) || (channelName.indexOf("update") !== -1) || (channelName.indexOf("event") !== -1)) {
+			if (!message.author.bot) {
+				const attach = getAttachment(message.attachments);
+				const announceEmbedd = new Discord.MessageEmbed();
+				announceEmbedd.setColor(Math.floor(Math.random() * 16777214) + 1);
+				announceEmbedd.setAuthor(message.author.username, message.author.displayAvatarURL());
+				announceEmbedd.setFooter(footer);
+				if (message.content.startsWith("http") && (message.content.endsWith(".png") || message.content.endsWith(".jpg") || message.content.endsWith(".gif") || message.content.endsWith(".jpeg"))) {
+					announceEmbedd.setImage(message.content);
+				} else {
+					announceEmbedd.setDescription(message.content);
+				}
+				announceEmbedd.setImage(attach[0]);
+				message.channel.send(announceEmbedd);
+				message.delete({timeout: 1000});
 			}
-			announceEmbedd.setImage(attach[0]);
-			message.channel.send(announceEmbedd);
-			message.delete({timeout: 1000});
+		} else if (channelName.indexOf("suggestion") !== -1) {
+			if (!message.author.bot) {
+				message.react(upvote)
+				.then(() => message.react(downvote));
+			}
 		}
-	} else if (channelName.indexOf("suggestion") !== -1) {
-		if (!message.author.bot) {
-			message.react(upvote)
-			.then(() => message.react(downvote));
-    	}
-	} else if (channelName.indexOf(threeWord) !== -1) {
+	}
+	if (message.channel.id === threeWord) {
 		if (!message.author.bot && message.author !== previousAuthorThreeAdv) {
 			var i = 0; var story = message.content;
 			for (var x = 0; x < story.length; x++) {
@@ -474,7 +289,7 @@ client.on('message', async message => {
 	    } else if (message.author === previousAuthorThreeAdv) {
             message.delete();
 	    }
-	} else if (channelName.indexOf(oneWord) !== -1) {
+	} else if (message.channel.id === oneWord) {
 		if ((!message.author.bot) && (message.author !== previousAuthorAdv)) {
 	        var story = message.content;
 	        var notWord = false;
@@ -518,76 +333,76 @@ client.on('message', async message => {
 	    }
 	}
 	if (setupMode) {
-		if (message.channel.name === setup) {
-			if (message.author === setupUser) {
-				if (setupStep === 1) {
-					if (msg === "three") {
-						threeWordSetup = true;
-						message.channel.send("You are setting up three-word stories " + getUserMention(message.author) + " ! Enter the channel for your three-word stories. E.g `#three-words-story`");
-						setupStep++;
-					} else if (msg === "one") {
-						oneWordSetup = true;
-						message.channel.send("You are setting up one-word stories " + getUserMention(message.author) + " ! Enter the channel for your one-word stories. E.g `#one-word-story`");
-						setupStep++;
-					} else if (msg === "quit") {
-					    setupMode = false;
-					    setupStep = 0;
-						message.channel.send("Aborted setup of stories " + getUserMention(message.author) + " !");
-						return;
-					} else {
-						message.channel.send("Invalid answer " + getUserMention(message.author) + " ! Answer with `three`, `one` or `quit`!");
-						return;
-					}
-				} else if (setupStep === 2) {
-					if (threeWordSetup) {
-						if (msg === "quit") {
+		if (message.channel.id === setup) {
+			if (!message.author.bot) {
+				if (message.author === setupUser) {
+					if (setupStep === 1) {
+						if (msg === "three") {
+							threeWordSetup = true;
+							message.channel.send("You are setting up three-word stories " + getUserMention(message.author) + " ! Enter the channel for your three-word stories. E.g `#three-words-story`");
+							setupStep++;
+						} else if (msg === "one") {
+							oneWordSetup = true;
+							message.channel.send("You are setting up one-word stories " + getUserMention(message.author) + " ! Enter the channel for your one-word stories. E.g `#one-word-story`");
+							setupStep++;
+						} else if (msg === "quit") {
 							setupMode = false;
 							setupStep = 0;
 							message.channel.send("Aborted setup of stories " + getUserMention(message.author) + " !");
 							return;
-						} else if (msg.length !== 21) {
-							message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
-							return;
 						} else {
-							threeWordID = msg.slice(2, 20);
-							const channel = client.channels.cache.get(threeWordID);
-							if (!channel) {
-								message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
-								return;
-							}
-							threeWord = channel.name;
-							message.channel.send("You have set <#" + channel.id + "> as your three-words stories channel " + getUserMention(message.author) + " !");
-							message.channel.send("Setup is complete " + getUserMention(message.author) + " !`" + prefix + commands[0] + " mode three` to change story mode!");
-							setupMode = false;
-							threeWordSetup = false;
+							message.channel.send("Invalid answer " + getUserMention(message.author) + " ! Answer with `three`, `one` or `quit`!");
+							return;
 						}
-						setupMode = false;
-					} else if (oneWordSetup) {
-						if (msg === "quit") {
-							setupMode = false;
-							setupStep = 0;
-							message.channel.send("Aborted setup of stories!");
-							return;
-						} else if (msg.length !== 21) {
-							message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
-							return;
-						} else {
-							oneWordID = msg.slice(2, 20);
-							const channel = client.channels.cache.get(oneWordID);
-							if (!channel) {
-								message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
+					} else if (setupStep === 2) {
+						if (threeWordSetup) {
+							if (msg === "quit") {
+								setupMode = false;
+								setupStep = 0;
+								message.channel.send("Aborted setup of stories " + getUserMention(message.author) + " !");
 								return;
+							} else if (msg.length !== 21) {
+								message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
+								return;
+							} else {
+								threeWord = msg.slice(2, 20);
+								const channel = client.channels.cache.get(threeWord);
+								if (!channel) {
+									message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
+									return;
+								}
+								message.channel.send("You have set <#" + channel.id + "> as your three-words stories channel " + getUserMention(message.author) + " !");
+								message.channel.send("Setup is complete " + getUserMention(message.author) + " !`" + prefix + commands[0] + " mode three` to change story mode!");
+								setupMode = false;
+								threeWordSetup = false;
 							}
-							oneWord = channel.name;
-							message.channel.send("You have set <#" + channel.id + "> as your one-word stories channel " + getUserMention(message.author) + " !");
-							message.channel.send("Setup is complete " + getUserMention(message.author) + " ! `" + prefix + commands[0] + " mode one` to change story mode!");
 							setupMode = false;
-							oneWordSetup = false;
+						} else if (oneWordSetup) {
+							if (msg === "quit") {
+								setupMode = false;
+								setupStep = 0;
+								message.channel.send("Aborted setup of stories!");
+								return;
+							} else if (msg.length !== 21) {
+								message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
+								return;
+							} else {
+								oneWord = msg.slice(2, 20);
+								const channel = client.channels.cache.get(oneWord);
+								if (!channel) {
+									message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
+									return;
+								}
+								message.channel.send("You have set <#" + channel.id + "> as your one-word stories channel " + getUserMention(message.author) + " !");
+								message.channel.send("Setup is complete " + getUserMention(message.author) + " ! `" + prefix + commands[0] + " mode one` to change story mode!");
+								setupMode = false;
+								oneWordSetup = false;
+							}
 						}
 					}
+				} else {
+					message.channel.send("You don't have permissions to continue setup " + getUserMention(message.author) + " !");
 				}
-			} else {
-				message.channel.send("You don't have permissions to continue setup " + getUserMention(message.author) + " !");
 			}
 		}
 	}
@@ -619,7 +434,7 @@ client.on('message', async message => {
 					setupUser = message.author;
 					setupStep = 1;
 					setupMode = true;
-					setup = message.channel.name;
+					setup = message.channel.id;
 					message.channel.send("Story setup mode is active " + getUserMention(message.author) + " !");
 					message.channel.send("Do you want to setup Three-Word or One-Word stories? Answer with `three` or `one`. Type `quit` at any point to quit setup.");
 				} else if (args[0] === "mode") {
@@ -666,7 +481,12 @@ client.on('message', async message => {
 			} else {
 				if (args[0].length === 21) {
 					offenceChannel = args[0].slice(2, 20);
-					message.channel.send("Successfuly set offence channel to " + getChannelMention(offenceChannel) + ", " + getUserMention(message.author) + " !");
+					const channel = client.channels.cache.get(offenceChannel);
+					if (!channel) {
+						message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
+						return;
+					}
+					message.channel.send("Successfuly set offence channel to " + getChannelMention(channel.id) + ", " + getUserMention(message.author) + " !");
 				} else {
 					message.channel.send("Invalid channel " + getUserMention(message.author) +" ! Usage is `" + prefix + commands[2] + " [ #channel-name ]`");
 				}
@@ -708,9 +528,9 @@ client.on('message', async message => {
 				} else if (args[0] === "list") {
 					var showList = "";
 					for (var i = 0; i < blacklistedWords.length; i++) {
-						showList += ("(" + (i+1) + ") - `" + blacklistedWords[i] + "` \n");
+						showList += ("(" + (i+1) + ") `" + blacklistedWords[i] + "` \n");
 					}
-					message.channel.send("Here are the blacklisted words " + getUserMention(message.author) + ":\n(Index) - `word`\n" + showList);
+					message.channel.send("Here are the blacklisted words " + getUserMention(message.author) + ":\n(Index) `word`\n" + showList);
 				} else if (args[0] === "status") {
 					if (blacklist) message.channel.send("Blacklist is on " + getUserMention(message.author) + " !");
 					else if (!blacklist) message.channel.send("Blacklist is off " + getUserMention(message.author) + " !");
@@ -731,6 +551,8 @@ client.on('message', async message => {
 						if (args[1].length <= 2 && args[1].length > 0) {
 							prefix = args[1];
 							message.reply("current prefix is now set to `" + prefix + "`\nTo reset the prefix, type `" + prefix + commands[4] + " reset`.");
+							activity = (status + prefix + 'help');
+							client.user.setActivity(activity, { type: 'WATCHING'});
 						} else {
 							message.channel.send("Prefix `" + args[1] + "` must be 2 or less characters! Please try again " + getUserMention(message.author) + " !");
 						}
@@ -740,6 +562,8 @@ client.on('message', async message => {
 				if (message.member.hasPermission('KICK_MEMBERS')) {
 					prefix = defaultPrefix;
 					message.reply("current prefix has been reset to `" + prefix + "`");
+					activity = (status + prefix + 'help');
+					client.user.setActivity(activity, { type: 'WATCHING'});
 				}
 			} else {
 				message.channel.send("Invalid argument " + getUserMention(message.author) + "! Usage is `" + prefix + commands[4] + " [ set | reset ]`");
@@ -753,16 +577,21 @@ client.on('message', async message => {
 		} else if (command === commands[6]) { // Updates
 			if (message.member.hasPermission('KICK_MEMBERS')) {
 				if (!args.length) {
-					message.reply("command usage is `" + prefix + commands[6] + " set [ #channel-name ]`");
+					message.reply("command usage is `" + prefix + commands[6] + " set [ #channel ]`");
 				} else if (args[0] === "set") {
 					if (args[1].length === 21) {
 						updatesChannel = args[1].slice(2, 20);
-						message.channel.send("Successfuly set updates channel to " + getChannelMention(updatesChannel) + ", " + getUserMention(message.author) + " !");
+						const channel = client.channels.cache.get(updatesChannel);
+						if (!channel) {
+							message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
+							return;
+						}
+						message.channel.send("Successfuly set updates channel to " + getChannelMention(channel.id) + ", " + getUserMention(message.author) + " !");
 					} else {
-						message.channel.send("Invalid channel " + getUserMention(message.author) +" ! Usage is `" + prefix + commands[6] + " set [ #channel-name ]`");
+						message.channel.send("Invalid channel " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
 					}
 				} else {
-					message.channel.send("Invalid arguments " + getUserMention(message.author) +" ! Usage is `" + prefix + commands[6] + " set [ #channel-name ]`");
+					message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
 				}
 			} else {
 				message.channel.send("You don't have permission to set updates channel " + getUserMention(message.author) + " !");
@@ -802,7 +631,7 @@ client.on('message', async message => {
 					if (args[1] === undefined) {
 						const rl = message.member.guild.roles.cache.find(role => role.id === memberRole);
 						if (!rl) {
-							message.channel.send("Join role is not set " + getUserMention(message.author) + " ! To set a join role, `" + prefix + commands[7] + " role [ @role ]");
+							message.channel.send("Join role is not set " + getUserMention(message.author) + " ! To set a join role, `" + prefix + commands[7] + " role [ @role ]`");
 						} else {
 							const joinEmbed = new Discord.MessageEmbed();
 							joinEmbed.setDescription("Current join role is set to <@&" + rl.id + ">");
@@ -821,7 +650,7 @@ client.on('message', async message => {
 					message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[7] + " [ set | view | role ]`");
 				}
 			} else {
-				message.channel.send("You don't have permissions to setup join messages " + getUserMention(message.author) + " !");
+				message.channel.send("You don't have permission to setup join messages " + getUserMention(message.author) + " !");
 			}
 		} else if (command === commands[8]) { // Trigger
 			if (message.member.hasPermission('KICK_MEMBERS')) {
@@ -839,17 +668,16 @@ client.on('message', async message => {
 					} else if (args[0] === "list") {
 						var showList = "";
 						for (var i = 0; i < reactionTrigger.length; i++) {
-							showList += ("(" + (i+1) + ") - `" + reactionTrigger[i] + "` = `" + reactionResponse[i] +"`\n");
+							showList += ("(" + (i+1) + ") `" + reactionTrigger[i] + "` = `" + reactionResponse[i] +"`\n");
 						}
-						message.channel.send("Here are the triggers & their responses " + getUserMention(message.author) + ":\n(Index) - `trigger` = `response`\n" + showList);
+						message.channel.send("Here are the triggers & their responses " + getUserMention(message.author) + ":\n(Index) `trigger` = `response`\n" + showList);
 					} else if (args[0] === "add") {
 						if (args[1] === undefined || args[2] === undefined) {
 							message.channel.send("Usage is `" + prefix + commands[8] + " add <trigger> <response>` " + getUserMention(message.author) + " ! You can see the trigger list by doing `" + prefix + commands[8] + " list`");
 						} else {
 							const trigger = args[1];
 							reactionTrigger.push(trigger);
-							args.shift();
-							args.shift();
+							args.shift(); args.shift();
 							const response = args.join(" ");
 							reactionResponse.push(response);
 							message.channel.send("Successfully added `" + trigger + "` with response `" + response + "`, " + getUserMention(message.author) + " !");
@@ -877,6 +705,18 @@ client.on('message', async message => {
 				}
 			} else {
 				message.channel.send("You don't have permissions to add trigger words " + getUserMention(message.author) + " !");
+			}
+		} else if (command === commands[9]) { // Auto
+			if (message.member.hasPermission('KICK_MEMBERS')) {
+				if (auto) {
+					auto = false;
+					message.channel.send("Turned off auto-embeds " + getUserMention(message.author) + " !");
+				} else if (!auto) {
+					auto = true;
+					message.channel.send("Turned on auto-embeds " + getUserMention(message.author) + " !");
+				}
+			} else {
+				message.channel.send("You don't have permission to toggle embeds " + getUserMention(message.author) + " !");
 			}
 		}
 	}
