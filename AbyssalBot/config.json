@@ -1,6 +1,6 @@
 {
-	"prefix": "a!",
-	"token": "insert_token",
+	"prefix": "!!",
+	"token": "insert token",
 	"name": "insert_bot_name",
 	"version": "1.0.0",
 	"serverID": "insert_guild_id",
@@ -9,6 +9,8 @@
 	"updatesChannel": "Insert_default_updates_channel_id",
 	"upvote": "👍",
 	"downvote": "👎",
+	"acceptedEmoji": "✅",
 	"joinMessage": "insert_default_join_message",
-	"memberRole": "insert_join_role_id"
+	"memberRole": "",
+	"status": "over test | "
 }

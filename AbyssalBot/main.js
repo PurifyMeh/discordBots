@@ -2,12 +2,10 @@ const Discord = require('discord.js');
 const mysql = require('mysql');
 const fs = require('fs');
 const client = new Discord.Client( {partials: ["MESSAGE", "REACTION", "GUILD_MEMBER", "CHANNEL", "USER"]});
-const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote, footer } = require('./config.json');
+const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote, footer, acceptedEmoji } = require('./config.json');
 var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole, status } = require('./config.json');
 var defaultPrefix = prefix;
-const { address, user, pass, database} = require('./mysql.json');
-const { updateCreateChannel } = require('./updates/channelCreate');
-const { get } = require('http');
+const { address, user, pass, database } = require('./mysql.json');
 var activity = (status + prefix + 'help');
 
 var previousAuthorThreeAdv = '0'; var previousAuthorAdv = '0';
@@ -15,17 +13,23 @@ var previousStoryThree = ""; var previousStory = "";
 var newLineThree = false; var newLine = false;
 var embThree; var emb;
 var setupMode = false; var setup; var setupStep = 1;
-var threeWord = " "; var oneWord = " "; var storyModeT = "e"; var storyModeO = "e";
+var threeWord = " "; var oneWord = " "; var storyModeT = "s"; var storyModeO = "s";
 var oneWordID = ''; var threeWordID = '';
 var threeWordSetup = false; var oneWordSetup = false;
 var openImage = false; var setupUser = '0';
-var blacklist = true; var join = true; var auto = true;
+var blacklist = true; var join = true; var auto = false;
 
 var blacklistedWords = ["nigger", "nigga", "nazi"];
-var trigger = true;
-var reactionTrigger = ["r", "ayy", "ping"];
-var reactionResponse = [`"That's rough buddy"`, "lmao", "<user> pong!"];
+var trigger = true; var mysqlcheck = false;
+
+var reactionTrigger = ["ayy", "ping"];
+var reactionResponse = ["lmao", "<user> pong!"];
+
 var commands = ["story", "images", "offence", "blacklist", "prefix", "help", "update", "join", "trigger", "auto"];
+
+var commandsDesc = ["Setup story channels", "Toggle image reactions", "Setup offence-log channel", "Add words to blacklist", 
+					"Change command prefix", "Display help", "Setup update channel", "Setup join message", "Add trigger words", 
+					"Toggle auto embeds and suggestions"];
 
 var namehist = []; var uuidhist = [];
 var bans; var mutes;
@@ -39,11 +43,17 @@ var pool = mysql.createPool({
     database: database
 });
 
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 const updateFiles = fs.readdirSync('./updates').filter(file => file.endsWith('.js'));
 client.updates = new Discord.Collection();
+client.commands = new Discord.Collection();
 for (const file of updateFiles) {
 	const update = require(`./updates/${file}`);
 	client.updates.set(update.name, update);
+}
+for (const file of commandFiles) {
+	const command = require(`./commands/${file}`);
+	client.commands.set(command.name, command);
 }
 
 client.once('ready', () => {
@@ -53,7 +63,8 @@ client.once('ready', () => {
         if (err) {
 			console.log("Error connecting to mySQL. Connection refused!");
         } else {
-            console.log("Connected to mysql database!");
+			console.log("Connected to mysql database!");
+			mysqlcheck = true;
             pool.query("SELECT * FROM litebans_bans", function (err, res) {
                 if (err) {
                     console.log('mySQL bans is not configured!');
@@ -96,7 +107,7 @@ client.once('ready', () => {
 });
 
 client.on('guildMemberAdd', async member => {
-	client.updates.get('guildMemberAdd').execute(Discord, client, member, updatesChannel, joinMessage, memberRole);
+	client.updates.get('guildMemberAdd').execute(Discord, client, member, updatesChannel, joinMessage, join, memberRole);
 });
 
 client.login(token);
@@ -160,7 +171,7 @@ client.on('messageReactionAdd', async (react, user) => {
 	const msg = react.message;
 	if (msg.channel.name.indexOf("suggestion") !== -1) {
 		if (!msg.author.bot) {
-			if (react.emoji.name === '✅') {
+			if (react.emoji.name === acceptedEmoji) {
 				const guild = client.guilds.cache.get(serverID);
 				const accepter = await guild.members.fetch(user);
 					if (accepter.hasPermission('KICK_MEMBERS')) {
@@ -227,8 +238,8 @@ client.on('message', async message => {
 			}
 		}
 	}
+	var channelName = message.channel.name;
 	if (auto) {
-		var channelName = message.channel.name;
 		if ((channelName.indexOf("announcement") !== -1) || (channelName.indexOf("update") !== -1) || (channelName.indexOf("event") !== -1)) {
 			if (!message.author.bot) {
 				const attach = getAttachment(message.attachments);
@@ -252,8 +263,8 @@ client.on('message', async message => {
 			}
 		}
 	}
-	if (message.channel.id === threeWord) {
-		if (!message.author.bot && message.author !== previousAuthorThreeAdv) {
+	if (channelName.indexOf(threeWord) !== -1) {
+		if (!message.author.bot) { // && message.author !== previousAuthorThreeAdv) {
 			var i = 0; var story = message.content;
 			for (var x = 0; x < story.length; x++) {
 				if (msg[x] === " ") {
@@ -261,18 +272,38 @@ client.on('message', async message => {
 				}
 			}
 			if (i != 2) {
-			    message.delete();
+			    message.delete({timeout: 500});
 	        } else {
-	            previousAuthorThreeAdv = message.author;
-	            previousStoryThree = previousStoryThree + " " + story;
+				previousAuthorThreeAdv = message.author;
+				if (story.startsWith(",") || story.startsWith("!") || story.startsWith("?") || story.startsWith(".")) {
+					var punctuation;
+					if (previousStoryThree.endsWith(",") || previousStoryThree.endsWith(".") || previousStoryThree.endsWith("!") || previousStoryThree.endsWith("?")) {
+						punctuation = "";
+					} else {
+						punctuation = story.slice(0, 1);
+					}
+					var res = story.slice(1);
+					if (res[0] === " ") {
+						story = punctuation + res;
+					} else {
+						story = punctuation + " " + res;
+					}
+					previousStoryThree = previousStoryThree + story;
+				} else {
+					previousStoryThree = previousStoryThree + " " + story;
+				}
 	            if (previousStoryThree.endsWith(".") || previousStoryThree.endsWith("!") || previousStoryThree.endsWith("?")) {
+					var punctuation = previousStoryThree[-1];
+					if (previousStoryThree[-2] === " ") {
+						previousStoryThree = previousStoryThree.slice(0, previousStoryThree.lastIndexOf(" ")-2) + punctuation;
+					}
 	                newLineThree = true;
 	            }
-	            message.delete();
+	            message.delete({timeout: 500});
 	            const storyEmbed = new Discord.MessageEmbed();
     			storyEmbed.setColor(Math.floor(Math.random() * 16777214) + 1);
     			storyEmbed.setDescription(previousStoryThree);
-    			storyEmbed.setAuthor(message.author.username, message.author.displayAvatarURL());
+    			storyEmbed.setAuthor(message.member.displayName, message.author.displayAvatarURL());
 				storyEmbed.setFooter(footer);
 				if (storyModeT === "e") {
 					if (embThree !== undefined) await embThree.edit(storyEmbed);
@@ -287,9 +318,9 @@ client.on('message', async message => {
 	            }
 	        }
 	    } else if (message.author === previousAuthorThreeAdv) {
-            message.delete();
+            message.delete({timeout: 500});
 	    }
-	} else if (message.channel.id === oneWord) {
+	} else if (channelName.indexOf(oneWord) !== -1) {
 		if ((!message.author.bot) && (message.author !== previousAuthorAdv)) {
 	        var story = message.content;
 	        var notWord = false;
@@ -299,22 +330,31 @@ client.on('message', async message => {
 	            }
 	        }
 	        if (notWord) {
-	            message.delete();
+	            message.delete({timeout: 500});
 	        } else {
 	            previousAuthorAdv = message.author;
-	            if (story === "," || story === "!" || story === "?") {
-	                previousStory = previousStory + story;
+	            if (story === "," || story === "!" || story === "?" || story === ".") {
+					previousStory = previousStory + story;
+				} else if (story.startsWith(",") || story.startsWith("!") || story.startsWith("?") || story.startsWith(".")) {
+					var punctuation;
+					if (previousStory.endsWith(",") || previousStory.endsWith(".") || previousStory.endsWith("!") || previousStory.endsWith("?")) {
+						punctuation = "";
+					} else {
+						punctuation = story.slice(0, 1);
+					}
+					var res = story.slice(1);
+					previousStory = previousStory + punctuation + res;
 	            } else {
 	                previousStory = previousStory + " " + story;
 	            }
 	            if (previousStory.endsWith(".") || previousStory.endsWith("!") || previousStory.endsWith("?")) {
 	                newLine = true;
 	            }
-	            message.delete();
+	            message.delete({timeout: 500});
 	            const storyEmbed = new Discord.MessageEmbed();
 				storyEmbed.setColor(Math.floor(Math.random() * 16777214) + 1);
 				storyEmbed.setDescription(previousStory);
-				storyEmbed.setAuthor(message.author.username, message.author.displayAvatarURL());
+				storyEmbed.setAuthor(message.member.displayName, message.author.displayAvatarURL());
 				storyEmbed.setFooter(`${footer}`);
 				if (storyModeO === "e") {
 	            	if (emb !== undefined) await emb.edit(storyEmbed);
@@ -329,7 +369,7 @@ client.on('message', async message => {
 	            }
 	        }
 	    } else if (message.author === previousAuthorAdv) {
-            message.delete();
+            message.delete({timeout: 500});
 	    }
 	}
 	if (setupMode) {
@@ -365,12 +405,13 @@ client.on('message', async message => {
 								message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
 								return;
 							} else {
-								threeWord = msg.slice(2, 20);
-								const channel = client.channels.cache.get(threeWord);
+								threeWordID = msg.slice(2, 20);
+								const channel = client.channels.cache.get(threeWordID);
 								if (!channel) {
 									message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
 									return;
 								}
+								threeWord = channel.name;
 								message.channel.send("You have set <#" + channel.id + "> as your three-words stories channel " + getUserMention(message.author) + " !");
 								message.channel.send("Setup is complete " + getUserMention(message.author) + " !`" + prefix + commands[0] + " mode three` to change story mode!");
 								setupMode = false;
@@ -387,12 +428,13 @@ client.on('message', async message => {
 								message.channel.send("Invalid channel! Please try again " + getUserMention(message.author) + " !");
 								return;
 							} else {
-								oneWord = msg.slice(2, 20);
-								const channel = client.channels.cache.get(oneWord);
+								oneWordID = msg.slice(2, 20);
+								const channel = client.channels.cache.get(oneWordID);
 								if (!channel) {
 									message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
 									return;
 								}
+								oneWord = channel.name;
 								message.channel.send("You have set <#" + channel.id + "> as your one-word stories channel " + getUserMention(message.author) + " !");
 								message.channel.send("Setup is complete " + getUserMention(message.author) + " ! `" + prefix + commands[0] + " mode one` to change story mode!");
 								setupMode = false;
@@ -406,22 +448,24 @@ client.on('message', async message => {
 			}
 		}
 	}
-	if (message.author.bot) {
-		if (msg.search("ban") !== -1) {
-			getHistory();
-			getBans();
-		} if (msg.search("mute") !== -1) {
-			getHistory();
-			getMutes();
-		} if (msg.search("kick") !== -1) {
-			getHistory();
-			getKicks();
-		} if (msg.search("warn") !== -1) {
-			getHistory();
-			getWarns();
+	if (mysqlcheck) {
+		if (message.author.bot) {
+			if (msg.search("ban") !== -1) {
+				getHistory();
+				getBans();
+			} if (msg.search("mute") !== -1) {
+				getHistory();
+				getMutes();
+			} if (msg.search("kick") !== -1) {
+				getHistory();
+				getKicks();
+			} if (msg.search("warn") !== -1) {
+				getHistory();
+				getWarns();
+			}
+			uuidhist = [];
+			namehist = [];
 		}
-		uuidhist = [];
-    	namehist = [];
 	}
 	if (msg.startsWith(prefix)) {
 		const args = message.content.slice(prefix.length).split(' ');
@@ -442,18 +486,18 @@ client.on('message', async message => {
 						message.channel.send("Usage is `" + prefix + " " + commands[0] + " mode [ one | three ]` "+ getUserMention(message.author) + " !");
 					} else if (args[1] === "one") {
 						if (storyModeO === "s") {
-							message.channel.send("Successfully changed story mode of " + getChannelMention(oneWordID) + " from `save` to `edit`, " + getUserMention(message.author) + " !");
+							message.channel.send("Successfully changed story mode of " + getChannelMention(oneWord) + " from `save` to `edit`, " + getUserMention(message.author) + " !");
 							storyModeO = "e";
 						} else if (storyModeO === "e") {
-							message.channel.send("Successfully changed story mode of " + getChannelMention(oneWordID) + " from `edit` to `save`, " + getUserMention(message.author) + " !");
+							message.channel.send("Successfully changed story mode of " + getChannelMention(oneWord) + " from `edit` to `save`, " + getUserMention(message.author) + " !");
 							storyModeO = "s";
 						}
 					} else if (args[1] === "three") {
 						if (storyModeT === "s") {
-							message.channel.send("Successfully changed story mode of " + getChannelMention(threeWordID) + " from `save` to `edit`, " + getUserMention(message.author) + " !");
+							message.channel.send("Successfully changed story mode of " + getChannelMention(threeWord) + " from `save` to `edit`, " + getUserMention(message.author) + " !");
 							storyModeT = "e";
 						} else if (storyModeO === "e") {
-							message.channel.send("Successfully changed story mode of " + getChannelMention(threeWordID) + " from `edit` to `save`, " + getUserMention(message.author) + " !");
+							message.channel.send("Successfully changed story mode of " + getChannelMention(threeWord) + " from `edit` to `save`, " + getUserMention(message.author) + " !");
 							storyModeT = "s";
 						}
 					} else {
@@ -464,260 +508,38 @@ client.on('message', async message => {
 				message.channel.send("You don't have permission to setup stories " + getUserMention(message.author) + " !");
 			}
 		} else if (command === commands[1]) { // Images
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (!openImage) {
-					openImage = true;
-					message.channel.send("I have enabled image reactions " + getUserMention(message.author) + " !");
-				} else if (openImage) { 
-					openImage = false;
-					message.channel.send("I have disabled image reactions " + getUserMention(message.author) + " !");
-				}
-			} else {
-				message.channel.send("You don't have permissions to toggle reactions " + getUserMention(message.author) + " !");
-			}
+			const returnImages = client.commands.get(commands[1]).execute(message, openImage);
+			openImage = returnImages.openImage;
 		} else if (command === commands[2]) { // Offence
-			if (!args.length) {
-				message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! `" + prefix + commands[2] + " [ #channel-name ]`");
-			} else {
-				if (args[0].length === 21) {
-					offenceChannel = args[0].slice(2, 20);
-					const channel = client.channels.cache.get(offenceChannel);
-					if (!channel) {
-						message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
-						return;
-					}
-					message.channel.send("Successfuly set offence channel to " + getChannelMention(channel.id) + ", " + getUserMention(message.author) + " !");
-				} else {
-					message.channel.send("Invalid channel " + getUserMention(message.author) +" ! Usage is `" + prefix + commands[2] + " [ #channel-name ]`");
-				}
-			}
+			const returnOffence = client.commands.get(commands[2]).execute(client, message, args, offenceChannel, prefix, commands);
+			offenceChannel = returnOffence.offenceChannel;
 		} else if (command === commands[3]) { // Blacklist
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (!args.length) {
-					if (blacklist) {
-						blacklist = false;
-						message.channel.send("I will not delete blacklisted words now " + getUserMention(message.author) + " ! `" + prefix + commands[3] + " help` for more options!");
-					} else if (!blacklist) {
-						blacklist = true;
-						message.channel.send("I will delete blacklisted words now" + getUserMention(message.author) + " ! `" + prefix + commands[3] + " help` for more options!");
-					}
-				} else if (args[0] === "help") {
-					message.channel.send("Options available are `" + prefix + commands[3] + " [ add | remove | list | status | help ]`" + getUserMention(message.author) + " !");
-				} else if (args[0] === "add") {
-					if (args[1] === undefined) {
-						message.channel.send("Usage is `" + prefix + commands[3] + " add <word>` " + getUserMention(message.author) + " ! You can see the blacklisted words by doing `" + prefix + commands[3] + " list`");
-					} else {
-						blacklistedWords.push(args[1]);
-						message.channel.send("Successfully added `" + args[1] + "` into the blacklist " + getUserMention(message.author) + " !");
-					}
-				} else if (args[0] === "remove") {
-					if (args[1] === undefined) {
-						message.channel.send("Usage is `" + prefix + commands[3] + " remove <index>` " + getUserMention(message.author) + " ! You can find the index using `" + prefix + commands[3] + " list`");
-					} else {
-						if (isInt(args[1])) {
-							if (args[1] <= blacklistedWords.length && args[1] > 0) {
-								message.channel.send("Successfully removed `" + blacklistedWords[args[1]-1] + "` from the blacklist");
-								blacklistedWords.splice(args[1]-1, 1);
-							} else {
-								message.channel.send("Index out of range! Please try again " + getUserMention(message.author) + " !");
-							}
-						} else {
-							message.channel.send("Invalid index! Please try again " + getUserMention(message.author) + " !");
-						}
-					}
-				} else if (args[0] === "list") {
-					var showList = "";
-					for (var i = 0; i < blacklistedWords.length; i++) {
-						showList += ("(" + (i+1) + ") `" + blacklistedWords[i] + "` \n");
-					}
-					message.channel.send("Here are the blacklisted words " + getUserMention(message.author) + ":\n(Index) `word`\n" + showList);
-				} else if (args[0] === "status") {
-					if (blacklist) message.channel.send("Blacklist is on " + getUserMention(message.author) + " !");
-					else if (!blacklist) message.channel.send("Blacklist is off " + getUserMention(message.author) + " !");
-				} else {
-					message.channel.send("Invalid argument " + getUserMention(message.author) + "! Usage is `" + prefix + commands[3] + " [ add | remove | list | status ]`");
-				}
-			} else {
-				message.channel.send("You don't have permission to use the blacklist " + getUserMention(message.author) + " !");
-			}
+			const returnedBlacklist = client.commands.get(commands[3]).execute(message, args, blacklist, blacklistedWords, prefix, commands);
+			blacklistedWords = returnedBlacklist.blacklistedWords;
+			blacklist = returnedBlacklist.blacklist;
 		} else if (command === commands[4]) { // Prefix
-			if (!args.length) {
-				message.reply("current prefix is `" + prefix + "`\nTo change prefix, do `" + prefix + commands[4] + " set <prefix>`");
-			} else if (args[0] === "set") {
-				if (message.member.hasPermission('KICK_MEMBERS')) {
-					if (args[1] === undefined) {
-						message.reply("to change prefix, do `" + prefix + commands[4] + " set <prefix>`");
-					} else {
-						if (args[1].length <= 2 && args[1].length > 0) {
-							prefix = args[1];
-							message.reply("current prefix is now set to `" + prefix + "`\nTo reset the prefix, type `" + prefix + commands[4] + " reset`.");
-							activity = (status + prefix + 'help');
-							client.user.setActivity(activity, { type: 'WATCHING'});
-						} else {
-							message.channel.send("Prefix `" + args[1] + "` must be 2 or less characters! Please try again " + getUserMention(message.author) + " !");
-						}
-					}
-				}
-			} else if (args[0] === "reset") {
-				if (message.member.hasPermission('KICK_MEMBERS')) {
-					prefix = defaultPrefix;
-					message.reply("current prefix has been reset to `" + prefix + "`");
-					activity = (status + prefix + 'help');
-					client.user.setActivity(activity, { type: 'WATCHING'});
-				}
-			} else {
-				message.channel.send("Invalid argument " + getUserMention(message.author) + "! Usage is `" + prefix + commands[4] + " [ set | reset ]`");
-			}
+			const returnPrefix = client.commands.get(commands[4]).execute(client, message, args, commands, prefix, defaultPrefix, activity, status);
+			if (returnPrefix.prefix !== undefined) prefix = returnPrefix.prefix;
+			if (returnPrefix.activity !== undefined) activity = returnPrefix.activity;
+			if (returnPrefix.status !== undefined) status = returnPrefix.status;
 		} else if (command === commands[5]) { // Help
-			var showHelp = "";
-			for (var i = 0; i < commands.length; i++) {
-				showHelp += ("`" + commands[i] + "`\n");
-			}
-			message.reply("here's the available commands from <@" + client.user.id + ">\nPrefix = `" + prefix + "`\n" + showHelp);
-		} else if (command === commands[6]) { // Updates
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (!args.length) {
-					message.reply("command usage is `" + prefix + commands[6] + " set [ #channel ]`");
-				} else if (args[0] === "set") {
-					if (args[1].length === 21) {
-						updatesChannel = args[1].slice(2, 20);
-						const channel = client.channels.cache.get(updatesChannel);
-						if (!channel) {
-							message.channel.send("Unknown channel! Please try again " + getUserMention(message.author) + " !");
-							return;
-						}
-						message.channel.send("Successfuly set updates channel to " + getChannelMention(channel.id) + ", " + getUserMention(message.author) + " !");
-					} else {
-						message.channel.send("Invalid channel " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
-					}
-				} else {
-					message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
-				}
-			} else {
-				message.channel.send("You don't have permission to set updates channel " + getUserMention(message.author) + " !");
-			}
+			client.commands.get(commands[5]).execute(client, message, prefix, commands, commandsDesc);
+		} else if (command === commands[6]) { // Update
+			const returnUpdates = client.commands.get(commands[6]).execute(client, message, args, commands, prefix, updatesChannel);
+			updatesChannel = returnUpdates.updatesChannel;
 		} else if (command === commands[7]) { // Join
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (!args.length) {
-					if (join) {
-						join = false;
-						message.channel.send("Turned off join messages " + getUserMention(message.author) + " ! For more options, `" + prefix + commands[7] + " [ set | view | role ]`");
-					} else if (!join) {
-						join = true;
-						message.channel.send("Turned on join messages " + getUserMention(message.author) + " ! For more options, `" + prefix + commands[7] + " [ set | view | role ]`");
-					}
-				} else if (args[0] === "set") {
-					if (args[1] === undefined) {
-						message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[7] + " set [ message ]`");
-					} else {
-						args.shift();
-						joinMessage = args.join(" ");
-						message.channel.send("Succesfully changed join message to `" + joinMessage +"` " + getUserMention(message.author) + " !");
-						const joinEmbed = new Discord.MessageEmbed();
-						joinEmbed.setTitle("New Member Alert!");
-						joinEmbed.setDescription(`${joinMessage}, ${message.author}!`);
-						const preview = message.channel.send("This is a preview of the join message, it will be deleted in 5 seconds. \n", joinEmbed);
-						(await preview).delete({timeout: 5000});
-					}
-				} else if (args[0] === "view") {
-					const joinEmbed = new Discord.MessageEmbed();
-					joinEmbed.setTitle("New Member Alert!");
-					joinEmbed.setDescription(`${joinMessage}, ${message.author}!`);
-					joinEmbed.setFooter(footer);
-					const preview = message.channel.send("This is a preview of the join message, it will be deleted in 5 seconds. \n", joinEmbed);
-					(await message).delete({timeout: 5000});
-					(await preview).delete({timeout: 5000});
-				} else if (args[0] === "role") {
-					if (args[1] === undefined) {
-						const rl = message.member.guild.roles.cache.find(role => role.id === memberRole);
-						if (!rl) {
-							message.channel.send("Join role is not set " + getUserMention(message.author) + " ! To set a join role, `" + prefix + commands[7] + " role [ @role ]`");
-						} else {
-							const joinEmbed = new Discord.MessageEmbed();
-							joinEmbed.setDescription("Current join role is set to <@&" + rl.id + ">");
-							joinEmbed.setFooter(footer);
-							message.channel.send(joinEmbed);
-						}
-					}
-					else if (args[1].length === 22) {
-						memberRole = args[1].slice(3,21);
-						const rl = message.member.guild.roles.cache.find(role => role.id === memberRole);
-						message.channel.send("Successfully set <@&" + rl.id + "> as join role " + getUserMention(message.author) + " !");
-					} else {
-						message.channel.send("Invalid role " + getUserMention(message.author) + " ! Please try again!");
-					}
-				} else {
-					message.channel.send("Invalid arguments " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[7] + " [ set | view | role ]`");
-				}
-			} else {
-				message.channel.send("You don't have permission to setup join messages " + getUserMention(message.author) + " !");
-			}
+			const returnJoin = await client.commands.get(commands[7]).execute(Discord, message, args, prefix, commands, joinMessage, join, memberRole, footer);
+			if (returnJoin.join !== undefined) join = returnJoin.join;
+			if (returnJoin.joinMessage !== undefined) joinMessage = returnJoin.joinMessage;
+			if (returnJoin.memberRole !== undefined) memberRole = returnJoin.memberRole;
 		} else if (command === commands[8]) { // Trigger
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (!args.length) {
-					if (!trigger) {
-						trigger = true;
-						message.channel.send("Now listening for trigger words, " + getUserMention(message.author) + ". For more options, `" + prefix + commands[8] + " [ list | add | remove | status ]`");
-					} else if (trigger) {
-						trigger = false;
-						message.channel.send("Stopped listening for trigger words, " + getUserMention(message.author) + ". For more options, `" + prefix + commands[8] + " [ list | add | remove | status ]`");
-					}
-				} else {
-					if (args[0] === undefined) {
-						message.channel.send("Invalid argument " + getUserMention(message.author) + " ! Usage is `" + prefix + commands[8] + " [ list | add | remove | status ]`");
-					} else if (args[0] === "list") {
-						var showList = "";
-						for (var i = 0; i < reactionTrigger.length; i++) {
-							showList += ("(" + (i+1) + ") `" + reactionTrigger[i] + "` = `" + reactionResponse[i] +"`\n");
-						}
-						message.channel.send("Here are the triggers & their responses " + getUserMention(message.author) + ":\n(Index) `trigger` = `response`\n" + showList);
-					} else if (args[0] === "add") {
-						if (args[1] === undefined || args[2] === undefined) {
-							message.channel.send("Usage is `" + prefix + commands[8] + " add <trigger> <response>` " + getUserMention(message.author) + " ! You can see the trigger list by doing `" + prefix + commands[8] + " list`");
-						} else {
-							const trigger = args[1];
-							reactionTrigger.push(trigger);
-							args.shift(); args.shift();
-							const response = args.join(" ");
-							reactionResponse.push(response);
-							message.channel.send("Successfully added `" + trigger + "` with response `" + response + "`, " + getUserMention(message.author) + " !");
-						}
-					} else if (args[0] === "remove") {
-						if (args[1] === undefined) {
-							message.channel.send("Usage is `" + prefix + commands[8] + " remove <index>` " + getUserMention(message.author) + " ! You can find the index using `" + prefix + commands[8] + " list`");
-						} else {
-							if (isInt(args[1])) {
-								if (args[1] <= reactionTrigger.length && args[1] > 0) {
-									message.channel.send("Successfully removed `" + reactionTrigger[args[1]-1] + "` from the trigger list " + getUserMention(message.author) + " !");
-									reactionTrigger.splice(args[1]-1, 1);
-									reactionResponse.splice(args[1]-1, 1);
-								} else {
-									message.channel.send("Index out of range! Please try again " + getUserMention(message.author) + " !");
-								}
-							} else {
-								message.channel.send("Invalid index! Please try again " + getUserMention(message.author) + " !");
-							}
-						}
-					} else if (args[0] === "status") {
-						if (trigger) message.channel.send("Still listening for triggers " + getUserMention(message.author) + " !");
-						else if (!trigger) message.channel.send("Not listening for triggers " + getUserMention(message.author) + " !");
-					}
-				}
-			} else {
-				message.channel.send("You don't have permissions to add trigger words " + getUserMention(message.author) + " !");
-			}
+			const returnTrigger = client.commands.get(commands[8]).execute(message, args, prefix, commands, trigger, reactionTrigger, reactionResponse);
+			trigger = returnTrigger.trigger;
+			reactionResponse = returnTrigger.reactionResponse;
+			reactionTrigger = returnTrigger.reactionTrigger;
 		} else if (command === commands[9]) { // Auto
-			if (message.member.hasPermission('KICK_MEMBERS')) {
-				if (auto) {
-					auto = false;
-					message.channel.send("Turned off auto-embeds " + getUserMention(message.author) + " !");
-				} else if (!auto) {
-					auto = true;
-					message.channel.send("Turned on auto-embeds " + getUserMention(message.author) + " !");
-				}
-			} else {
-				message.channel.send("You don't have permission to toggle embeds " + getUserMention(message.author) + " !");
-			}
+			const returnAuto = client.commands.get(commands[9]).execute(message, auto);
+			auto = returnAuto.auto;
 		}
 	}
 });
@@ -727,11 +549,6 @@ function getAttachment(attachments) {
 	return attachments.array()
 		.filter(attachment => valid.test(attachment.proxyURL))
 		.map(attachment => attachment.proxyURL);
-}
-
-function isInt(value) {
-	var x;
-	return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
 }
 
 function getChannelMention(channelid) {
@@ -744,26 +561,27 @@ function getUserMention(author) {
 
 function getHistory() {
 	pool.getConnection(function(err, connection) {
-        if(err){
+        if (err) {
             console.log("Lost connection to mySQL!");
-        }
-        connection.query("SELECT uuid, name FROM litebans_history", function (err, result) {
-            if (err) {
-                console.log('mySQL names & UUID database is not properly configured!');
-            } else {
-                for (var i = 0; i < result.length; i++) {
-                    uuidhist.push(result[i].uuid);
-                    namehist.push(result[i].name);
+        } else {
+            connection.query("SELECT uuid, name FROM litebans_history", function (err, result) {
+                if (err) {
+                    console.log('mySQL names & UUID database is not properly configured!');
+                } else {
+                    for (var i = 0; i < result.length; i++) {
+                        uuidhist.push(result[i].uuid);
+                        namehist.push(result[i].name);
+                    }
                 }
-            }
-            connection.release();
-        });
+                connection.release();
+            });
+        }
     });
 }
 
 function getBans() {
 	pool.getConnection(function(err, connection) {
-        if(err){
+        if (err) {
             console.log("Lost connection to mySQL!");
         } else {
             connection.query("SELECT * FROM litebans_bans", function (err, res) {
@@ -823,7 +641,7 @@ function getBans() {
 
 function getMutes() {
 	pool.getConnection(function(err, connection){
-        if(err){
+        if (err) {
             console.log("Lost connection to mySQL!");
         } else {
             connection.query("SELECT * FROM litebans_mutes", function (err, res) {
@@ -883,7 +701,7 @@ function getMutes() {
 
 function getKicks() {
 	pool.getConnection(function(err, connection){
-        if(err){
+        if (err) {
             console.log("Lost connection to mySQL!");
         } else {
             connection.query("SELECT * FROM litebans_kicks", function (err, res) {
@@ -921,7 +739,7 @@ function getKicks() {
 
 function getWarns() {
 	pool.getConnection(function(err, connection){
-        if(err){
+        if (err) {
             console.log("Lost connection to mySQL!");
         } else {
             connection.query("SELECT * FROM litebans_warnings", function (err, res) {
