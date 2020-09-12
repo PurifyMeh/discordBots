@@ -1,17 +1,17 @@
 module.exports = {
     name: 'prefix',
     description: 'Change prefix for commands',
-    execute(client, message, args, commands, prefix, defaultPrefix, activity, status) {
+    execute(client, message, args, command, prefix, defaultPrefix, activity, status) {
         if (!args.length) {
-            message.reply("current prefix is `" + prefix + "`\nTo change prefix, do `" + prefix + commands[4] + " set <prefix>`");
+            message.reply("current prefix is `" + prefix + "`\nTo change prefix, do `" + prefix + command + " set <prefix>`");
         } else if (args[0] === "set") {
             if (message.member.hasPermission('KICK_MEMBERS')) {
                 if (args[1] === undefined) {
-                    message.reply("to change prefix, do `" + prefix + commands[4] + " set <prefix>`");
+                    message.reply("to change prefix, do `" + prefix + command + " set <prefix>`");
                 } else {
                     if (args[1].length <= 2 && args[1].length > 0) {
                         prefix = args[1];
-                        message.reply("current prefix is now set to `" + prefix + "`\nTo reset the prefix, type `" + prefix + commands[4] + " reset`.");
+                        message.reply("current prefix is now set to `" + prefix + "`\nTo reset the prefix, type `" + prefix + command + " reset`.");
                         activity = (status + prefix + 'help');
                         client.user.setActivity(activity, { type: 'WATCHING'});
                     } else {
@@ -27,7 +27,7 @@ module.exports = {
                 client.user.setActivity(activity, { type: 'WATCHING'});
             }
         } else {
-            message.channel.send("Invalid argument <@" + message.author + "> ! Usage is `" + prefix + commands[4] + " [ set | reset ]`");
+            message.channel.send("Invalid argument <@" + message.author + "> ! Usage is `" + prefix + command + " [ set | reset ]`");
         }
         return {
             prefix,

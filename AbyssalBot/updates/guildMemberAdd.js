@@ -2,7 +2,7 @@ const { footer } = require('../config.json');
 
 module.exports = {
     name: 'guildMemberAdd',
-    execute(Discord, client, member, updatesChannel, joinMessage, memberRole) {
+    async execute(Discord, client, member, updatesChannel, joinMessage, join, memberRole, memberCountChannel) {
         if (join) {
             const channel = client.channels.cache.get(member.guild.systemChannelID);
             if (!channel) return;

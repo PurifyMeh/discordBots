@@ -1,19 +1,19 @@
 module.exports = {
     name: 'join',
     description: 'Setup join channel and roles',
-    async execute(Discord, message, args, prefix, commands, joinMessage, join, memberRole, footer) {
+    async execute(Discord, message, args, prefix, command, joinMessage, join, memberRole, footer) {
         if (message.member.hasPermission('KICK_MEMBERS')) {
             if (!args.length) {
                 if (join) {
                     join = false;
-                    message.channel.send("Turned off join messages <@" + message.author + "> ! For more options, `" + prefix + commands[7] + " [ set | view | role ]`");
+                    message.channel.send("Turned off join messages <@" + message.author + "> ! For more options, `" + prefix + command + " [ set | view | role ]`");
                 } else if (!join) {
                     join = true;
-                    message.channel.send("Turned on join messages <@" + message.author + "> ! For more options, `" + prefix + commands[7] + " [ set | view | role ]`");
+                    message.channel.send("Turned on join messages <@" + message.author + "> ! For more options, `" + prefix + command + " [ set | view | role ]`");
                 }
             } else if (args[0] === "set") {
                 if (args[1] === undefined) {
-                    message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + commands[7] + " set [ message ]`");
+                    message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + command + " set [ message ]`");
                 } else {
                     args.shift();
                     joinMessage = args.join(" ");
@@ -36,7 +36,7 @@ module.exports = {
                 if (args[1] === undefined) {
                     const rl = message.member.guild.roles.cache.find(role => role.id === memberRole);
                     if (!rl) {
-                        message.channel.send("Join role is not set <@" + message.author + "> ! To set a join role, `" + prefix + commands[7] + " role [ @role ]`");
+                        message.channel.send("Join role is not set <@" + message.author + "> ! To set a join role, `" + prefix + commands[6] + " role [ @role ]`");
                     } else {
                         const joinEmbed = new Discord.MessageEmbed();
                         joinEmbed.setDescription("Current join role is set to <@&" + rl.id + ">");
@@ -52,7 +52,7 @@ module.exports = {
                     message.channel.send("Invalid role <@" + message.author + "> ! Please try again!");
                 }
             } else {
-                message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + commands[7] + " [ set | view | role ]`");
+                message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + command + " [ set | view | role ]`");
             }
             return {
                 join,

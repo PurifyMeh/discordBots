@@ -1,7 +1,7 @@
 module.exports = {
     name: 'offence',
     description: 'Setup offence-logger for litebans',
-    execute(client, message, args, offenceChannel, prefix, commands) {
+    execute(client, message, args, offenceChannel, prefix, command) {
         if (message.member.hasPermission('KICK_MEMBERS')) {
             if (!args.length) {
                 message.channel.send("Invalid arguments <@" + message.author + "> ! `" + prefix + commands[2] + " [ #channel-name ]`");
@@ -15,7 +15,7 @@ module.exports = {
                     }
                     message.channel.send("Successfuly set offence channel to <#" + channel.id + ">, <@" + message.author + "> !");
                 } else {
-                    message.channel.send("Invalid channel <@" + message.author + "> ! Usage is `" + prefix + commands[2] + " [ #channel-name ]`");
+                    message.channel.send("Invalid channel <@" + message.author + "> ! Usage is `" + prefix + command + " [ #channel-name ]`");
                 }
             }
             return {

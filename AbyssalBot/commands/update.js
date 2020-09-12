@@ -1,10 +1,10 @@
 module.exports = {
     name: 'update',
     description: 'Setup updates channel',
-    execute(client, message, args, commands, prefix, updatesChannel) {
+    execute(client, message, args, command, prefix, updatesChannel) {
         if (message.member.hasPermission('KICK_MEMBERS')) {
             if (!args.length) {
-                message.reply("command usage is `" + prefix + commands[6] + " set [ #channel ]`");
+                message.reply("command usage is `" + prefix + command + " set [ #channel ]`");
             } else if (args[0] === "set") {
                 if (args[1].length === 21) {
                     updatesChannel = args[1].slice(2, 20);
@@ -15,10 +15,10 @@ module.exports = {
                     }
                     message.channel.send("Successfuly set updates channel to <#" + channel.id + "> , <@" + message.author + "> !");
                 } else {
-                    message.channel.send("Invalid channel <@" + message.author + "> ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
+                    message.channel.send("Invalid channel <@" + message.author + "> ! Usage is `" + prefix + command + " set [ #channel ]`");
                 }
             } else {
-                message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + commands[6] + " set [ #channel ]`");
+                message.channel.send("Invalid arguments <@" + message.author + "> ! Usage is `" + prefix + command + " set [ #channel ]`");
             }
             return {
                 updatesChannel
