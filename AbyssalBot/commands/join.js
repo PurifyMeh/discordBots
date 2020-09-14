@@ -18,16 +18,18 @@ module.exports = {
                     args.shift();
                     joinMessage = args.join(" ");
                     message.channel.send("Succesfully changed join message to `" + joinMessage +"` <@" + message.author + "> !");
+                    joinMessage = joinMessage.replace(/<user>/gi, getUserMention(message.author));
                     const joinEmbed = new Discord.MessageEmbed();
                     joinEmbed.setTitle("New Member Alert!");
-                    joinEmbed.setDescription(`${joinMessage}, ${message.author}!`);
+                    joinEmbed.setDescription(joinMessage);
+                    joinEmbed.setFooter(footer);
                     const preview = message.channel.send("This is a preview of the join message, it will be deleted in 5 seconds. \n", joinEmbed);
                     (await preview).delete({timeout: 5000});
                 }
             } else if (args[0] === "view") {
                 const joinEmbed = new Discord.MessageEmbed();
                 joinEmbed.setTitle("New Member Alert!");
-                joinEmbed.setDescription(`${joinMessage}, ${message.author}!`);
+                joinEmbed.setDescription(joinMessage);
                 joinEmbed.setFooter(footer);
                 const preview = message.channel.send("This is a preview of the join message, it will be deleted in 5 seconds. \n", joinEmbed);
                 (await message).delete({timeout: 5000});
@@ -63,4 +65,7 @@ module.exports = {
             message.channel.send("You don't have permission to setup join messages " + getUserMention(message.author) + " !");
         }
     }
+}
+function getUserMention(author) {
+	return ("<@" + author.id + ">");
 }

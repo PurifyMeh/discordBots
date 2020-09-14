@@ -1,0 +1,22 @@
+[
+    {
+        "trigger": "ayy",
+        "response": "lmao"
+    },
+    {
+        "trigger": "ping",
+        "response": "<user> pong"
+    },
+    {
+        "trigger": "test",
+        "response": "testt"
+    },
+    {
+        "trigger": "another",
+        "response": "one"
+    },
+    {
+        "trigger": "and",
+        "response": "another one"
+    }
+]

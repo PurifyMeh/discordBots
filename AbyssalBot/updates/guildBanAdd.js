@@ -8,7 +8,7 @@ module.exports = {
         const change = new Discord.MessageEmbed();
         change.setColor('#ff0000');
         change.addFields(
-            { name: ("Member @" + user.tag + " was banned from the discord!"), value: (await guild.fetchBan(user)).reason, inline: true},
+            { name: ("Member @" + user.tag + " was banned!"), value: (await guild.fetchBan(user)).reason, inline: false},
             { name: 'Member ID', value: user.id, inline: true }
         );
         change.setFooter(footer);

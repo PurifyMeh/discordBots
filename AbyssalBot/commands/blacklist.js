@@ -1,3 +1,4 @@
+const fs = require('fs');
 module.exports = {
     name: 'blacklist',
     description: 'Add blacklisted words',
@@ -21,8 +22,22 @@ module.exports = {
                 if (args[1] === undefined) {
                     message.channel.send("Usage is `" + prefix + command + " add <word>` <@" + message.author + "> ! You can see the blacklisted words by doing `" + prefix + command + " list`");
                 } else {
-                    blacklistedWords.push(args[1]);
-                    message.channel.send("Successfully added `" + args[1] + "` into the blacklist <@" + message.author + "> !");
+                    var comma = false;
+                    const word = args[1];
+                    for (var i = 0; i < word.length; i++) {
+                        if (word[i] === ",") {
+                            comma = true;
+                        }
+                    }
+                    if (!comma) {
+                        blacklistedWords.push(word);
+                        message.channel.send("Successfully added `" + word + "` into the blacklist <@" + message.author + "> !");
+                        fs.writeFile('blacklist.txt', blacklistedWords.toString(), function(err) {
+                            if (err) throw err;
+                        });
+                    } else if (comma) {
+                        message.channel.send("Word cannot contain a comma(,) <@" + message.author + "> ! Please use a different word!");
+                    }
                 }
             } else {
                 message.channel.send("You don't have permission to add to the blacklist <@" + message.author + "> ! You can use `" + prefix + command + " [ list | status ]` instead!");
@@ -36,6 +51,9 @@ module.exports = {
                         if (args[1] <= blacklistedWords.length && args[1] > 0) {
                             message.channel.send("Successfully removed `" + blacklistedWords[args[1]-1] + "` from the blacklist");
                             blacklistedWords.splice(args[1]-1, 1);
+                            fs.writeFile('blacklist.txt', blacklistedWords.toString(), function(err) {
+                                if (err) throw err;
+                            });
                         } else {
                             message.channel.send("Index out of range! Please try again <@" + message.author + "> !");
                         }

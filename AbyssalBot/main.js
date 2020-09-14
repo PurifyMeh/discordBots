@@ -3,7 +3,7 @@ const mysql = require('mysql');
 const fs = require('fs');
 const client = new Discord.Client( {partials: ["MESSAGE", "REACTION", "GUILD_MEMBER", "CHANNEL", "USER"]});
 const { token, version, serverID, acceptedSuggestionsChannel, upvote, downvote, footer, acceptedEmoji } = require('./config.json');
-var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole, status } = require('./config.json');
+var { prefix, offenceChannel, updatesChannel, joinMessage, memberRole, status, memberCountID } = require('./config.json');
 var defaultPrefix = prefix;
 const { address, user, pass, database } = require('./mysql.json');
 var activity = (status + prefix + 'help');
@@ -16,11 +16,12 @@ var threeWord = "three-word"; var oneWord = "one-word"; var storyModeT = "s"; va
 var oneWordID = ''; var threeWordID = '';
 var threeWordSetup = false; var oneWordSetup = false;
 var setupUser = '0';
-var blacklist = true; var join = true; var auto = false;
-var blacklistedWords = ["nigger", "nigga", "nazi"];
+var blacklist = true; var join = true; var auto = true;
 var trigger = true; var mysqlcheck = false;
-var reactionTrigger = ["ayy", "ping"];
-var reactionResponse = ["lmao", "<user> pong!"];
+var defaultBlacklistedWords = ["nigger", "nigga", "nazi"]; var blacklistedWords = [];
+var defaultReactionTrigger = ["ayy", "ping"]; var reactionTrigger = [];
+var defaultReactionResponse = ["lmao", "<user> pong!"];	var reactionResponse = [];
+
 var commands = [
 	"story", "offence", "blacklist", "prefix", 
 	"help", "update", "join", "trigger", "auto", 
@@ -41,6 +42,59 @@ var pool = mysql.createPool({
     password: pass,
     database: database
 });
+
+fs.access('triggers.txt', function(err) {
+	if (err) reactionTrigger = defaultReactionTrigger;
+});
+fs.access('responses.txt', function(err) {
+	if (err) reactionResponse = defaultReactionResponse;
+});
+fs.access('blacklist.txt', function(err) {
+	if (err) blacklistedWords = defaultBlacklistedWords;
+});
+fs.readFile('triggers.txt', (error, str) => {
+    if (error) {
+		console.log("Error while fetching triggers from file!");
+		return;
+	}
+    var array;
+    if (str !== undefined) {
+        var l = str.toString();
+        array = l.split(',');
+        reactionTrigger = array;
+    } else {
+        reactionTrigger = defaultReactionTrigger;
+    }
+});
+fs.readFile('responses.txt', (error, str) => {
+    if (error) {
+		console.log("Error while fetching reponses from file!");
+		return;
+	}
+    var array;
+    if (str !== undefined) {
+        var l = str.toString();
+        array = l.split(',');
+        reactionResponse = array;
+    } else {
+        reactionResponse = defaultReactionResponse;
+    }
+});
+fs.readFile('blacklist.txt', (error, str) => {
+    if (error) {
+		console.log("Error while fetching blacklists from file!");
+		return;
+	}
+    var array;
+    if (str !== undefined) {
+        var l = str.toString();
+        array = l.split(',');
+        blacklistedWords = array;
+    } else {
+        blacklistedWords = defaultBlacklistedWords;
+    }
+});
+
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 const updateFiles = fs.readdirSync('./updates').filter(file => file.endsWith('.js'));
 client.updates = new Discord.Collection();
@@ -92,6 +146,11 @@ client.once('ready', () => {
 			connection.release();
         }
 	});
+	const server = client.guilds.cache.get(serverID);
+	if (!server) return;
+	const channel = server.channels.cache.get(memberCountID);
+	if (!channel) return;
+	memberCountChannel = channel;
 });
 
 client.login(token);
@@ -99,21 +158,29 @@ client.login(token);
 client.on('guildMemberAdd', async member => {
 	client.updates.get('guildMemberAdd').execute(Discord, client, member, updatesChannel, joinMessage, join, memberRole, memberCountChannel);
 	try {
-		(await memberCountChannel).edit({
+		var id = memberCountID;
+		if(memberCountChannel !== undefined) id = memberCountChannel.id;
+		const channel = member.guild.channels.cache.get(id);
+		if (!channel) return;
+		channel.edit({
 			name: ('USER COUNT: ' + member.guild.memberCount)
 		});
 	} catch (error) {
-		console.log("Something happened while adding user count!");
+		console.log("Something happened while adding user count!", error);
 	}
 });
 client.on('guildMemberRemove', async member => {
 	client.updates.get('guildMemberRemove').execute(Discord, client, member, updatesChannel, memberCountChannel);
 	try {
-		(await memberCountChannel).edit({
+		var id = memberCountID;
+		if(memberCountChannel !== undefined) id = memberCountChannel.id;
+		const channel = member.guild.channels.cache.get(id);
+		if (!channel) return;
+		channel.edit({
 			name: ('USER COUNT: ' + member.guild.memberCount)
 		});
 	} catch (error) {
-		console.log("Something happened while removing user count!");
+		console.log("Something happened while removing user count!", error);
 	}
 });
 client.on('channelCreate', async channel => { 
@@ -198,8 +265,16 @@ client.on('message', async message => {
 			if (!message.author.bot) {
 				const trigger = msg.replace(/ /gi, "_");
 				for (var i = 0; i < reactionTrigger.length; i++) {
-					if (trigger === reactionTrigger[i]) {
-						const response = reactionResponse[i].replace(/<user>/gi, getUserMention(message.author));
+					const t = reactionTrigger[i];
+					if (t.startsWith("!")) {
+						if (trigger.includes(t.slice(1))) {
+							var response = reactionResponse[i].replace(/<user>/gi, getUserMention(message.author));
+							message.channel.send(response);
+							return;
+						}
+					}
+					if (trigger === t) {
+						var response = reactionResponse[i].replace(/<user>/gi, getUserMention(message.author));
 						message.channel.send(response);
 						return;
 					}
@@ -474,7 +549,7 @@ client.on('message', async message => {
 				client.commands.get(commands[4]).execute(client, message, prefix, commands, commandsDesc);
 			} else if (command === commands[5]) { // Update
 				const returnUpdates = client.commands.get(commands[5]).execute(client, message, args, commands[5], prefix, updatesChannel);
-				updatesChannel = returnUpdates.updatesChannel;
+				if (returnUpdates.updatesChannel !== undefined) updatesChannel = returnUpdates.updatesChannel;
 			} else if (command === commands[6]) { // Join
 				const returnJoin = await client.commands.get(commands[6]).execute(Discord, message, args, prefix, commands[6], joinMessage, join, memberRole, footer);
 				if (returnJoin.join !== undefined) join = returnJoin.join;
@@ -490,7 +565,7 @@ client.on('message', async message => {
 				auto = returnAuto.auto;
 			} else if (command === commands[9]) { // Membercount
 				const returnMember = await client.commands.get(commands[9]).execute(client, message, memberCountChannel);
-				if (returnMember.memberCountChannel !== undefined) memberCountChannel = returnMember.memberCountChannel;
+				if (returnMember.ch !== undefined) memberCountChannel = returnMember.ch;
 			}
 		} catch(error) {
 			console.log("Something happened when executing commands!");

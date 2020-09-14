@@ -4,7 +4,7 @@ module.exports = {
     async execute(client, message, memberCountChannel) {
         if (message.member.hasPermission('KICK_MEMBERS')) {
             if (memberCountChannel === undefined) {
-                memberCountChannel = await message.member.guild.channels.create(('USER COUNT: ' + message.member.guild.memberCount), {
+                const ch = await message.member.guild.channels.create(('USER COUNT: ' + message.member.guild.memberCount), {
                     type: 'voice',
                     permissionOverwrites: [
                         {
@@ -18,14 +18,14 @@ module.exports = {
                     ],
                 });
                 message.channel.send("Created a member count channel " + getUserMention(message.author) + " !");
+                return {
+                    ch
+                }
             } else {
-                message.channel.send("Channel already exists " + getUserMention(message.author) + " !");
+                message.channel.send("The server currently has " + message.member.guild.memberCount + " members " + getUserMention(message.author) + " !");
             }
         } else {
             message.channel.send("You don't have permissions to setup member count " + getUserMention(message.author) + " !");
-        }
-        return {
-            memberCountChannel
         }
     }
 }
